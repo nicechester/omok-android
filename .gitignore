@@ -1,0 +1,53 @@
+# Gradle files
+.gradle/
+.gradletasknamecache
+build/
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Log/OS files
+*.log
+*.hprof
+*~
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+.idea_modules/
+*.iml
+*.iws
+*.ipr
+out/
+.classpath
+.c9/
+*.launch
+.settings/
+.vscode/
+*.sublime-workspace
+
+# Android Studio
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Signing files
+*.keystore
+*.jks
+
+# Misc
+*.swp
+*.swo
+*.swn
+.env
+.env.local
+
+# Kotlin
+.kotlin/
+*.kotlin_metadata
+
+# Firebase
+google-services.json
+
+.java-version
