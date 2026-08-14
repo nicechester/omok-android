@@ -23,19 +23,49 @@ fun BottomNavBar(navController: NavHostController) {
             icon = { Icon(Icons.Default.Home, contentDescription = "Rooms") },
             label = { Text("Rooms") },
             selected = currentRoute == "rooms",
-            onClick = { navController.navigate("rooms") }
+            onClick = {
+                if (currentRoute != "rooms") {
+                    navController.navigate("rooms") {
+                        popUpTo(navController.graph.startDestinationId) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            }
         )
         NavigationBarItem(
             icon = { Icon(Icons.Default.PlayArrow, contentDescription = "Play") },
             label = { Text("Play") },
             selected = currentRoute == "play",
-            onClick = { navController.navigate("play") }
+            onClick = {
+                if (currentRoute != "play") {
+                    navController.navigate("play") {
+                        popUpTo(navController.graph.startDestinationId) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            }
         )
         NavigationBarItem(
             icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
             label = { Text("Settings") },
             selected = currentRoute == "settings",
-            onClick = { navController.navigate("settings") }
+            onClick = {
+                if (currentRoute != "settings") {
+                    navController.navigate("settings") {
+                        popUpTo(navController.graph.startDestinationId) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            }
         )
     }
 }
