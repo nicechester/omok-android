@@ -14,6 +14,11 @@ data class LastMove(
     val color: String = ""
 )
 
+data class UndoRequest(
+    val requestedBy: String = "",
+    val createdAt: Long = 0
+)
+
 data class GameRoom(
     val id: String = "",
     val status: String = "waiting", // waiting, playing, finished
@@ -29,6 +34,7 @@ data class GameRoom(
     val createdBy: String = "",
     val timerDuration: Int? = null,
     val turnStartedAt: Long? = null,
+    val undoRequest: UndoRequest? = null,
     val createdAt: Long = 0,
     val updatedAt: Long = 0
 ) {

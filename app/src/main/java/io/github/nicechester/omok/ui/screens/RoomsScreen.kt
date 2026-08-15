@@ -61,7 +61,7 @@ fun RoomsScreen(
     onJoinRoom: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
     val recentRooms = RecentRoomsManager.getRecentRooms(context).collectAsState(initial = emptyList())
     val pendingDelete = remember { mutableStateOf<Pair<RecentRoom, Int>?>(null) }
     val showNewGame = remember { mutableStateOf(false) }

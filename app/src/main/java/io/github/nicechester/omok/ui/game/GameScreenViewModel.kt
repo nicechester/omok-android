@@ -77,6 +77,36 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
         }
     }
 
+    fun requestUndo() {
+        viewModelScope.launch {
+            try {
+                GameRepository.requestUndo()
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to request undo: ${e.message}"
+            }
+        }
+    }
+
+    fun approveUndo() {
+        viewModelScope.launch {
+            try {
+                GameRepository.approveUndo()
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to approve undo: ${e.message}"
+            }
+        }
+    }
+
+    fun rejectUndo() {
+        viewModelScope.launch {
+            try {
+                GameRepository.rejectUndo()
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to reject undo: ${e.message}"
+            }
+        }
+    }
+
     fun leaveGame() {
         GameRepository.stopListening()
     }

@@ -45,6 +45,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import io.github.nicechester.omok.data.model.GameRoom
 import kotlin.math.roundToInt
 
@@ -59,11 +63,19 @@ fun GameBoardScreen(
     onMakeMove: (row: Int, col: Int) -> Unit,
     onForfeit: () -> Unit,
     onRematch: () -> Unit,
-    onLeave: () -> Unit
+    onLeave: () -> Unit,
+    onRequestUndo: () -> Unit = {},
+    onApproveUndo: () -> Unit = {},
+    onRejectUndo: () -> Unit = {}
 ) {
     val uid = Firebase.auth.currentUser?.uid
     val mySeat = uid?.let { room.seatOf(it) }
-    val canPlay = room.isPlaying() && mySeat != null && room.turn == mySeat
+    val canPlay = room.isPlaying() && mySeat != null && room.turn == mySeat && room.undoRequest == null
+
+    val undoRequest = room.undoRequest
+    val iAmRequester = undoRequest != null && undoRequest.requestedBy == uid
+    val iAmOpponent = undoRequest != null && undoRequest.requestedBy != uid && mySeat != null
+    val canRequestUndo = room.isPlaying() && mySeat != null && room.moveCount >= 2 && undoRequest == null && room.turn != mySeat
 
 
     val blackSeat = room.blackSeat
@@ -88,6 +100,24 @@ fun GameBoardScreen(
     val context = LocalContext.current
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // Undo request dialog — shown to opponent
+    if (iAmOpponent) {
+        val requesterName = room.players[undoRequest!!.requestedBy]?.name
+            ?: room.players[undoRequest.requestedBy]?.uid?.take(6)
+            ?: "Opponent"
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Undo Request") },
+            text = { Text("$requesterName wants to take back their last move.") },
+            confirmButton = {
+                TextButton(onClick = onApproveUndo) { Text("Approve") }
+            },
+            dismissButton = {
+                TextButton(onClick = onRejectUndo) { Text("Deny") }
+            }
+        )
+    }
 
     if (room.isFinished()) {
         val resultColor = when {
@@ -281,11 +311,11 @@ fun GameBoardScreen(
                 // Placeholder mic button (left) — matches iOS layout
                 Box(modifier = Modifier.size(48.dp))
 
-                // Undo — disabled until implemented
+                // Undo
                 Button(
-                    onClick = { /* TODO: undo */ },
+                    onClick = onRequestUndo,
                     modifier = Modifier.weight(1f),
-                    enabled = false,
+                    enabled = canRequestUndo,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFFEEEEEE),
                         contentColor = Color(0xFF0066FF),
@@ -294,7 +324,7 @@ fun GameBoardScreen(
                     ),
                     shape = RoundedCornerShape(50)
                 ) {
-                    Text("↩ Undo")
+                    Text(if (iAmRequester) "↩ Pending…" else "↩ Undo")
                 }
 
                 // Resign — right

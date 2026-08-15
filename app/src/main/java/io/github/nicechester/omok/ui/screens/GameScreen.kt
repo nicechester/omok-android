@@ -45,7 +45,10 @@ fun GameScreen(paddingValues: PaddingValues, viewModel: GameScreenViewModel? = n
             onMakeMove = { row, col -> resolvedViewModel.makeMove(row, col) },
             onForfeit = { resolvedViewModel.forfeit() },
             onRematch = { resolvedViewModel.voteRematch() },
-            onLeave = { resolvedViewModel.leaveGame() }
+            onLeave = { resolvedViewModel.leaveGame() },
+            onRequestUndo = { resolvedViewModel.requestUndo() },
+            onApproveUndo = { resolvedViewModel.approveUndo() },
+            onRejectUndo = { resolvedViewModel.rejectUndo() }
         )
     } else {
         Box(
