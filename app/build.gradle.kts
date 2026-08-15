@@ -73,6 +73,9 @@ dependencies {
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.7.5")
 
+    // DataStore
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
+
     // Firebase
     implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
     implementation("com.google.firebase:firebase-database-ktx")
