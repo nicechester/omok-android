@@ -7,6 +7,7 @@ import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import io.github.nicechester.omok.data.GameRepository
 import io.github.nicechester.omok.data.PreferencesManager
+import io.github.nicechester.omok.data.RecentRoomsManager
 import io.github.nicechester.omok.data.model.GameRoom
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,7 +30,11 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
                 val playerName = context?.let { PreferencesManager.getPlayerNameOnce(it) } ?: "Player"
                 android.util.Log.d("GameScreenViewModel", "joinOrCreateGame: gameId=$gameId, player=$playerName")
                 val success = GameRepository.joinOrCreateGame(gameId, playerName)
-                if (!success) _errorMessage.value = "Failed to join or create game"
+                if (success) {
+                    context?.let { RecentRoomsManager.recordPlay(it, gameId) }
+                } else {
+                    _errorMessage.value = "Failed to join or create game"
+                }
             } catch (e: Exception) {
                 _errorMessage.value = "Error: ${e.message}"
             }

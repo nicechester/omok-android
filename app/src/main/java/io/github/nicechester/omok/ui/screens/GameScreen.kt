@@ -33,19 +33,19 @@ import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GameScreen(paddingValues: PaddingValues) {
+fun GameScreen(paddingValues: PaddingValues, viewModel: GameScreenViewModel? = null) {
     val context = LocalContext.current
     val showGameSetup = remember { mutableStateOf(false) }
-    val viewModel: GameScreenViewModel = viewModel { GameScreenViewModel(context) }
-    val currentRoom = viewModel.currentRoom.collectAsState()
+    val resolvedViewModel: GameScreenViewModel = viewModel ?: viewModel { GameScreenViewModel(context) }
+    val currentRoom = resolvedViewModel.currentRoom.collectAsState()
 
     if (currentRoom.value != null) {
         GameBoardScreen(
             room = currentRoom.value!!,
-            onMakeMove = { row, col -> viewModel.makeMove(row, col) },
-            onForfeit = { viewModel.forfeit() },
-            onRematch = { viewModel.voteRematch() },
-            onLeave = { viewModel.leaveGame() }
+            onMakeMove = { row, col -> resolvedViewModel.makeMove(row, col) },
+            onForfeit = { resolvedViewModel.forfeit() },
+            onRematch = { resolvedViewModel.voteRematch() },
+            onLeave = { resolvedViewModel.leaveGame() }
         )
     } else {
         Box(
@@ -108,7 +108,7 @@ fun GameScreen(paddingValues: PaddingValues) {
                     onDismiss = { showGameSetup.value = false },
                     onStartGame = { gameId, isAI, timerSeconds, _ ->
                         val code = if (isAI) generateGameId() else gameId
-                        viewModel.joinOrCreateGame(code, timerSeconds)
+                        resolvedViewModel.joinOrCreateGame(code, timerSeconds)
                         showGameSetup.value = false
                     }
                 )
