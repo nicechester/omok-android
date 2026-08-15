@@ -17,7 +17,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Initialize Firebase
+        // Initialize Firebase (blocking in background)
         lifecycleScope.launch {
             FirebaseManager.initialize()
         }
