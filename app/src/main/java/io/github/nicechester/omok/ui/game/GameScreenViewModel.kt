@@ -113,6 +113,12 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
         viewModelScope.launch {
             try {
                 GameRepository.makeMove(row, col)
+            } catch (e: IllegalStateException) {
+                if (e.message == "double_open_three") {
+                    _errorMessage.value = "Cannot create two open threes in one move (3×3 rule)."
+                } else {
+                    _errorMessage.value = "Failed to make move: ${e.message}"
+                }
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to make move: ${e.message}"
             }
