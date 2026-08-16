@@ -56,14 +56,22 @@ private const val BOARD_SIZE = 15
 @Composable
 fun GameBoardScreen(
     room: GameRoom,
+    remainingSeconds: Int? = null,
     onMakeMove: (row: Int, col: Int) -> Unit,
     onForfeit: () -> Unit,
     onRematch: () -> Unit,
-    onLeave: () -> Unit
+    onLeave: () -> Unit,
+    onRequestUndo: () -> Unit = {},
+    onApproveUndo: () -> Unit = {},
+    onRejectUndo: () -> Unit = {}
 ) {
     val uid = Firebase.auth.currentUser?.uid
     val mySeat = uid?.let { room.seatOf(it) }
-    val canPlay = room.isPlaying() && mySeat != null && room.turn == mySeat
+    val canPlay = room.isPlaying() && mySeat != null && room.turn == mySeat && room.undoRequest == null
+    val canRequestUndo = room.isPlaying() && mySeat != null && room.moveCount >= 2
+        && room.undoRequest == null && room.turn != mySeat
+    // Show approval prompt to the opponent of the requester
+    val showUndoPrompt = room.undoRequest != null && room.undoRequest.requestedBy != uid
 
 
     val blackSeat = room.blackSeat
@@ -88,6 +96,37 @@ fun GameBoardScreen(
     val context = LocalContext.current
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    if (showUndoPrompt) {
+        ModalBottomSheet(
+            onDismissRequest = { onRejectUndo() },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            dragHandle = null
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Undo Request", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text("Opponent wants to undo the last move.", fontSize = 14.sp, color = Color.Gray)
+                Button(
+                    onClick = onApproveUndo,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0066FF)),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("Allow", fontSize = 16.sp, modifier = Modifier.padding(vertical = 4.dp)) }
+                Button(
+                    onClick = onRejectUndo,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEEEEEE), contentColor = Color(0xFFDD0000)),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("Deny", fontSize = 16.sp, modifier = Modifier.padding(vertical = 4.dp)) }
+            }
+        }
+    }
 
     if (room.isFinished()) {
         val resultColor = when {
@@ -147,6 +186,19 @@ fun GameBoardScreen(
                 color = Color.Black,
                 modifier = Modifier.weight(1f)
             )
+            if (remainingSeconds != null) {
+                val timerColor = when {
+                    remainingSeconds <= 2 -> Color.Red
+                    remainingSeconds <= 4 -> Color(0xFFFF6600)
+                    else -> Color.Black
+                }
+                Text(
+                    text = "${remainingSeconds}s",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = timerColor
+                )
+            }
             // Copy code
             IconButton(onClick = {
                 clipboardManager.setText(AnnotatedString(room.id))
@@ -281,11 +333,11 @@ fun GameBoardScreen(
                 // Placeholder mic button (left) — matches iOS layout
                 Box(modifier = Modifier.size(48.dp))
 
-                // Undo — disabled until implemented
+                // Undo
                 Button(
-                    onClick = { /* TODO: undo */ },
+                    onClick = onRequestUndo,
                     modifier = Modifier.weight(1f),
-                    enabled = false,
+                    enabled = canRequestUndo,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFFEEEEEE),
                         contentColor = Color(0xFF0066FF),
@@ -294,7 +346,7 @@ fun GameBoardScreen(
                     ),
                     shape = RoundedCornerShape(50)
                 ) {
-                    Text("↩ Undo")
+                    Text(if (room.undoRequest != null && room.undoRequest.requestedBy == uid) "Undo…" else "↩ Undo")
                 }
 
                 // Resign — right
