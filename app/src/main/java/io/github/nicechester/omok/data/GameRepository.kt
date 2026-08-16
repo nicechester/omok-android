@@ -11,6 +11,7 @@ import com.google.firebase.database.database
 import io.github.nicechester.omok.data.model.GameRoom
 import io.github.nicechester.omok.data.model.LastMove
 import io.github.nicechester.omok.data.model.PlayerSeat
+import io.github.nicechester.omok.data.model.UndoRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.tasks.await
@@ -27,7 +28,7 @@ object GameRepository {
     private var currentGameId: String? = null
 
     // Mirrors iOS GameViewModel.start(): claimSeat, create if not found
-    suspend fun joinOrCreateGame(gameId: String, playerName: String): Boolean {
+    suspend fun joinOrCreateGame(gameId: String, playerName: String, timerDuration: Int = 0): Boolean {
         val uid = auth.currentUser?.uid
         Log.d(tag, "joinOrCreateGame: gameId=$gameId, uid=$uid, playerName=$playerName")
         if (uid == null) {
@@ -39,7 +40,7 @@ object GameRepository {
             val snapshot = ref.get().await()
             Log.d(tag, "joinOrCreateGame: snapshot exists=${snapshot.exists()}")
             if (!snapshot.exists()) {
-                createGame(ref, uid, playerName)
+                createGame(ref, uid, playerName, timerDuration)
             } else {
                 claimSeat(ref, uid, playerName)
             }
@@ -54,7 +55,8 @@ object GameRepository {
     private suspend fun createGame(
         ref: com.google.firebase.database.DatabaseReference,
         uid: String,
-        playerName: String
+        playerName: String,
+        timerDuration: Int = 0
     ) {
         val sanitized = playerName.trim().take(20)
         val playerData = mutableMapOf<String, Any>(
@@ -64,7 +66,7 @@ object GameRepository {
         )
         if (sanitized.isNotEmpty()) playerData["name"] = sanitized
 
-        val data = mapOf(
+        val data = mutableMapOf<String, Any>(
             "status" to "waiting",
             "turn" to "black",
             "round" to 0,
@@ -76,6 +78,7 @@ object GameRepository {
             "createdAt" to ServerValue.TIMESTAMP,
             "updatedAt" to ServerValue.TIMESTAMP
         )
+        if (timerDuration > 0) data["timerDuration"] = timerDuration
         ref.setValue(data).await()
         Log.d(tag, "Game created: ${ref.key}")
     }
@@ -147,6 +150,7 @@ object GameRepository {
                 "turn" to if (playerColor == "black") "white" else "black",
                 "updatedAt" to ServerValue.TIMESTAMP
             )
+            if (dict["timerDuration"] != null) updates["turnStartedAt"] = ServerValue.TIMESTAMP
 
             val lastMoveDict = dict["lastMove"]
             if (lastMoveDict != null) updates["previousLastMove"] = lastMoveDict
@@ -260,6 +264,104 @@ object GameRepository {
         gamesRef.child(gameId).addValueEventListener(roomListener!!)
     }
 
+    suspend fun requestUndo() {
+        val gameId = currentGameId ?: return
+        val uid = auth.currentUser?.uid ?: return
+        val ref = gamesRef.child(gameId)
+        try {
+            val snapshot = ref.get().await()
+            val dict = snapshot.value as? Map<String, Any> ?: return
+            if (dict["status"] as? String != "playing") return
+            if ((dict["moveCount"] as? Number)?.toInt() ?: 0 < 2) return
+            if (dict["undoRequest"] != null) return
+            ref.updateChildren(mapOf(
+                "undoRequest" to mapOf("requestedBy" to uid, "createdAt" to ServerValue.TIMESTAMP),
+                "updatedAt" to ServerValue.TIMESTAMP
+            )).await()
+        } catch (e: Exception) { Log.e(tag, "requestUndo failed", e) }
+    }
+
+    suspend fun approveUndo() {
+        val gameId = currentGameId ?: return
+        val ref = gamesRef.child(gameId)
+        try {
+            val snapshot = ref.get().await()
+            val dict = snapshot.value as? Map<String, Any> ?: return
+            if (dict["status"] as? String != "playing") return
+            val undoReq = dict["undoRequest"] as? Map<String, Any> ?: return
+            val moveCount = ((dict["moveCount"] as? Number)?.toInt() ?: 0) - 1
+            val currentTurn = dict["turn"] as? String ?: return
+            val prevTurn = if (currentTurn == "black") "white" else "black"
+            val updates = mutableMapOf<String, Any?>(
+                "moveCount" to moveCount,
+                "turn" to prevTurn,
+                "undoRequest" to null,
+                "previousLastMove" to null,
+                "updatedAt" to ServerValue.TIMESTAMP
+            )
+            if (dict["timerDuration"] != null) updates["turnStartedAt"] = ServerValue.TIMESTAMP
+            val lastMoveDict = dict["lastMove"] as? Map<String, Any>
+            if (lastMoveDict != null) {
+                val r = (lastMoveDict["r"] as? Number)?.toInt()
+                val c = (lastMoveDict["c"] as? Number)?.toInt()
+                if (r != null && c != null) updates["board/${r}_${c}"] = null
+            }
+            val prevLastMove = dict["previousLastMove"]
+            updates["lastMove"] = prevLastMove
+            @Suppress("UNCHECKED_CAST")
+            ref.updateChildren(updates as Map<String, Any>).await()
+        } catch (e: Exception) { Log.e(tag, "approveUndo failed", e) }
+    }
+
+    suspend fun rejectUndo() {
+        val gameId = currentGameId ?: return
+        val ref = gamesRef.child(gameId)
+        try {
+            val snapshot = ref.get().await()
+            val dict = snapshot.value as? Map<String, Any> ?: return
+            if (dict["undoRequest"] == null) return
+            val updates = mutableMapOf<String, Any?>(
+                "undoRequest" to null,
+                "updatedAt" to ServerValue.TIMESTAMP
+            )
+            if (dict["timerDuration"] != null) updates["turnStartedAt"] = ServerValue.TIMESTAMP
+            @Suppress("UNCHECKED_CAST")
+            ref.updateChildren(updates as Map<String, Any>).await()
+        } catch (e: Exception) { Log.e(tag, "rejectUndo failed", e) }
+    }
+
+    suspend fun autoPassTurn(gameId: String, expectedTurn: String, expectedTurnStartedAt: Long) {
+        val uid = auth.currentUser?.uid ?: return
+        val ref = gamesRef.child(gameId)
+        try {
+            val snapshot = ref.get().await()
+            val dict = snapshot.value as? Map<String, Any> ?: return
+            if (dict["status"] as? String != "playing") return
+            if (dict["turn"] as? String != expectedTurn) return
+            if ((dict["turnStartedAt"] as? Number)?.toLong() != expectedTurnStartedAt) return
+
+            val players = dict["players"] as? Map<String, Any> ?: return
+            val loserColor = expectedTurn
+            val winnerColor = if (loserColor == "black") "white" else "black"
+            val winnerUid = players.entries
+                .firstOrNull { (_, v) -> (v as? Map<String, Any>)?.get("color") as? String == winnerColor }
+                ?.key
+
+            val updates = mutableMapOf<String, Any>(
+                "status" to "finished",
+                "result" to winnerColor,
+                "updatedAt" to ServerValue.TIMESTAMP
+            )
+            if (winnerUid != null) {
+                val currentScore = (dict["scores"] as? Map<String, Any>)?.get(winnerUid) as? Int ?: 0
+                updates["scores/$winnerUid"] = currentScore + 1
+            }
+            ref.updateChildren(updates).await()
+        } catch (e: Exception) {
+            Log.e(tag, "autoPassTurn failed", e)
+        }
+    }
+
     fun stopListening() {
         val gameId = currentGameId ?: return
         roomListener?.let { gamesRef.child(gameId).removeEventListener(it) }
@@ -304,6 +406,14 @@ object GameRepository {
             ?.mapNotNull { (k, v) -> (v as? Number)?.let { k to it.toInt() } }
             ?.toMap() ?: emptyMap()
 
+        val undoRequestDict = dict["undoRequest"] as? Map<String, Any>
+        val undoRequest = undoRequestDict?.let {
+            UndoRequest(
+                requestedBy = it["requestedBy"] as? String ?: "",
+                createdAt = (it["createdAt"] as? Number)?.toLong() ?: 0
+            )
+        }
+
         return GameRoom(
             id = gameId,
             status = dict["status"] as? String ?: "waiting",
@@ -319,6 +429,7 @@ object GameRepository {
             createdBy = dict["createdBy"] as? String ?: "",
             timerDuration = (dict["timerDuration"] as? Number)?.toInt(),
             turnStartedAt = (dict["turnStartedAt"] as? Number)?.toLong(),
+            undoRequest = undoRequest,
             createdAt = (dict["createdAt"] as? Number)?.toLong() ?: 0,
             updatedAt = (dict["updatedAt"] as? Number)?.toLong() ?: 0
         )

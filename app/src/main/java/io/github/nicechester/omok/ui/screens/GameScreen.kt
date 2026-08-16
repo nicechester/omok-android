@@ -17,7 +17,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -39,13 +44,30 @@ fun GameScreen(paddingValues: PaddingValues, viewModel: GameScreenViewModel? = n
     val resolvedViewModel: GameScreenViewModel = viewModel ?: viewModel { GameScreenViewModel(context) }
     val currentRoom = resolvedViewModel.currentRoom.collectAsState()
 
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> resolvedViewModel.onResume()
+                Lifecycle.Event.ON_PAUSE -> resolvedViewModel.onPause()
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     if (currentRoom.value != null) {
         GameBoardScreen(
             room = currentRoom.value!!,
+            remainingSeconds = resolvedViewModel.remainingSeconds.collectAsState().value,
             onMakeMove = { row, col -> resolvedViewModel.makeMove(row, col) },
             onForfeit = { resolvedViewModel.forfeit() },
             onRematch = { resolvedViewModel.voteRematch() },
-            onLeave = { resolvedViewModel.leaveGame() }
+            onLeave = { resolvedViewModel.leaveGame() },
+            onRequestUndo = { resolvedViewModel.requestUndo() },
+            onApproveUndo = { resolvedViewModel.approveUndo() },
+            onRejectUndo = { resolvedViewModel.rejectUndo() }
         )
     } else {
         Box(

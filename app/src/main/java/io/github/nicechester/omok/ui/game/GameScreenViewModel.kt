@@ -9,6 +9,8 @@ import io.github.nicechester.omok.data.GameRepository
 import io.github.nicechester.omok.data.PreferencesManager
 import io.github.nicechester.omok.data.RecentRoomsManager
 import io.github.nicechester.omok.data.model.GameRoom
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -18,6 +20,72 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage
+
+    private val _remainingSeconds = MutableStateFlow<Int?>(null)
+    val remainingSeconds: StateFlow<Int?> = _remainingSeconds
+
+    private var timerJob: Job? = null
+    private var timerAnchor: Pair<String, Long>? = null // turn to turnStartedAt
+    private var isPaused = false
+
+    init {
+        viewModelScope.launch {
+            GameRepository.currentRoom.collect { room ->
+                updateTimerState(room, force = false)
+            }
+        }
+    }
+
+    fun onResume() {
+        isPaused = false
+        updateTimerState(GameRepository.currentRoom.value, force = true)
+    }
+
+    fun onPause() {
+        isPaused = true
+        timerJob?.cancel()
+        timerJob = null
+    }
+
+    private fun updateTimerState(room: GameRoom?, force: Boolean) {
+        if (isPaused) {
+            timerJob?.cancel(); timerJob = null; return
+        }
+        if (room == null || !room.isPlaying()) {
+            timerJob?.cancel(); timerJob = null; _remainingSeconds.value = null; return
+        }
+        val duration = room.timerDuration ?: run {
+            timerJob?.cancel(); timerJob = null; _remainingSeconds.value = null; return
+        }
+        val turnStartedAt = room.turnStartedAt ?: run {
+            timerJob?.cancel(); timerJob = null; _remainingSeconds.value = null; return
+        }
+        val needsRestart = force || timerAnchor?.first != room.turn || timerAnchor?.second != turnStartedAt
+        if (needsRestart) {
+            timerJob?.cancel()
+            timerAnchor = room.turn to turnStartedAt
+            startTicking(room.turn, turnStartedAt, duration)
+        }
+    }
+
+    private fun startTicking(turn: String, turnStartedAt: Long, duration: Int) {
+        timerJob = viewModelScope.launch {
+            val gameId = GameRepository.currentRoom.value?.id ?: return@launch
+            while (true) {
+                if (isPaused) return@launch
+                val now = System.currentTimeMillis()
+                val elapsed = now - turnStartedAt
+                val remaining = maxOf(0L, duration * 1000L - elapsed)
+                val remainingInt = minOf(duration, ((remaining + 999) / 1000).toInt())
+                _remainingSeconds.value = remainingInt
+                if (remainingInt <= 0) {
+                    GameRepository.autoPassTurn(gameId, turn, turnStartedAt)
+                    return@launch
+                }
+                delay(1000)
+            }
+        }
+    }
 
     fun joinOrCreateGame(gameId: String, timerSeconds: Int = 0) {
         viewModelScope.launch {
@@ -29,7 +97,7 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
                 }
                 val playerName = context?.let { PreferencesManager.getPlayerNameOnce(it) } ?: "Player"
                 android.util.Log.d("GameScreenViewModel", "joinOrCreateGame: gameId=$gameId, player=$playerName")
-                val success = GameRepository.joinOrCreateGame(gameId, playerName)
+            val success = GameRepository.joinOrCreateGame(gameId, playerName, timerSeconds)
                 if (success) {
                     context?.let { RecentRoomsManager.recordPlay(it, gameId) }
                 } else {
@@ -74,6 +142,24 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to rematch: ${e.message}"
             }
+        }
+    }
+
+    fun requestUndo() {
+        viewModelScope.launch {
+            try { GameRepository.requestUndo() } catch (e: Exception) { _errorMessage.value = "Failed to request undo: ${e.message}" }
+        }
+    }
+
+    fun approveUndo() {
+        viewModelScope.launch {
+            try { GameRepository.approveUndo() } catch (e: Exception) { _errorMessage.value = "Failed to approve undo: ${e.message}" }
+        }
+    }
+
+    fun rejectUndo() {
+        viewModelScope.launch {
+            try { GameRepository.rejectUndo() } catch (e: Exception) { _errorMessage.value = "Failed to reject undo: ${e.message}" }
         }
     }
 
