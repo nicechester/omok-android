@@ -25,6 +25,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -43,6 +45,18 @@ fun GameScreen(paddingValues: PaddingValues, viewModel: GameScreenViewModel? = n
     val showGameSetup = remember { mutableStateOf(false) }
     val resolvedViewModel: GameScreenViewModel = viewModel ?: viewModel { GameScreenViewModel(context) }
     val currentRoom = resolvedViewModel.currentRoom.collectAsState()
+    val errorMessage by resolvedViewModel.errorMessage.collectAsState()
+
+    if (errorMessage != null) {
+        AlertDialog(
+            onDismissRequest = { resolvedViewModel.clearError() },
+            title = { Text("Invalid Move") },
+            text = { Text(errorMessage!!) },
+            confirmButton = {
+                TextButton(onClick = { resolvedViewModel.clearError() }) { Text("OK") }
+            }
+        )
+    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -57,7 +71,9 @@ fun GameScreen(paddingValues: PaddingValues, viewModel: GameScreenViewModel? = n
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     if (currentRoom.value != null) {
+
         GameBoardScreen(
             room = currentRoom.value!!,
             remainingSeconds = resolvedViewModel.remainingSeconds.collectAsState().value,
@@ -137,6 +153,7 @@ fun GameScreen(paddingValues: PaddingValues, viewModel: GameScreenViewModel? = n
             }
         }
     }
+    } // end Box
 }
 
 private fun generateGameId(): String {

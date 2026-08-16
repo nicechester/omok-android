@@ -142,6 +142,10 @@ object GameRepository {
             val board = dict["board"] as? Map<String, Any> ?: emptyMap()
             if (board.containsKey(cellKey)) return false
 
+            val boardCells = buildBoardMap(board).toMutableMap()
+            boardCells[cellKey] = playerColor
+            if (isDoubleOpenThree(boardCells, row, col, playerColor)) throw IllegalStateException("double_open_three")
+
             val moveCount = ((dict["moveCount"] as? Number)?.toInt() ?: 0) + 1
             val updates = mutableMapOf<String, Any>(
                 "board/$cellKey" to playerColor,
@@ -156,8 +160,6 @@ object GameRepository {
             if (lastMoveDict != null) updates["previousLastMove"] = lastMoveDict
 
             // Win detection
-            val boardCells = buildBoardMap(board).toMutableMap()
-            boardCells[cellKey] = playerColor
             val winLine = checkWin(boardCells, row, col, playerColor)
             if (winLine != null) {
                 updates["status"] = "finished"
@@ -172,6 +174,8 @@ object GameRepository {
 
             ref.updateChildren(updates).await()
             true
+        } catch (e: IllegalStateException) {
+            throw e
         } catch (e: Exception) {
             Log.e(tag, "makeMove failed", e)
             false
@@ -437,6 +441,38 @@ object GameRepository {
 
     private fun buildBoardMap(raw: Map<String, Any>): Map<String, String> =
         raw.mapNotNull { (k, v) -> (v as? String)?.let { k to it } }.toMap()
+
+    // Returns true if placing at (row,col) creates two or more open threes
+    private fun isDoubleOpenThree(board: Map<String, String>, row: Int, col: Int, color: String): Boolean {
+        val directions = listOf(0 to 1, 1 to 0, 1 to 1, 1 to -1)
+        var openThrees = 0
+        for ((dr, dc) in directions) {
+            if (countOpenThree(board, row, col, color, dr, dc)) openThrees++
+        }
+        return openThrees >= 2
+    }
+
+    // Detects an open three in a direction: exactly 3 consecutive stones with empty on both ends,
+    // and no same-color stone beyond the gap (e.g. _OOO_O is not an open three)
+    private fun countOpenThree(board: Map<String, String>, row: Int, col: Int, color: String, dr: Int, dc: Int): Boolean {
+        var fwdCount = 0
+        var r = row + dr; var c = col + dc
+        while (r in 0..14 && c in 0..14 && board["${r}_${c}"] == color) { fwdCount++; r += dr; c += dc }
+        val fwdEndR = r; val fwdEndC = c
+        val fwdOpen = fwdEndR in 0..14 && fwdEndC in 0..14 && board["${fwdEndR}_${fwdEndC}"] == null
+        val fwdGapStone = fwdOpen && (fwdEndR + dr) in 0..14 && (fwdEndC + dc) in 0..14 &&
+            board["${fwdEndR + dr}_${fwdEndC + dc}"] == color
+
+        var bwdCount = 0
+        r = row - dr; c = col - dc
+        while (r in 0..14 && c in 0..14 && board["${r}_${c}"] == color) { bwdCount++; r -= dr; c -= dc }
+        val bwdEndR = r; val bwdEndC = c
+        val bwdOpen = bwdEndR in 0..14 && bwdEndC in 0..14 && board["${bwdEndR}_${bwdEndC}"] == null
+        val bwdGapStone = bwdOpen && (bwdEndR - dr) in 0..14 && (bwdEndC - dc) in 0..14 &&
+            board["${bwdEndR - dr}_${bwdEndC - dc}"] == color
+
+        return (fwdCount + 1 + bwdCount) == 3 && fwdOpen && bwdOpen && !fwdGapStone && !bwdGapStone
+    }
 
     // Mirrors iOS GomokuRules.winningLine — exactly 5, no overline
     private fun checkWin(board: Map<String, String>, row: Int, col: Int, color: String): List<Pair<Int, Int>>? {
