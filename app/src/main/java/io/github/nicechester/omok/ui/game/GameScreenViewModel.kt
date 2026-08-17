@@ -21,6 +21,12 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage
 
+    private val _pendingReaction = MutableStateFlow<String?>(null)
+    val pendingReaction: StateFlow<String?> = _pendingReaction
+
+    private var reactionClearJob: Job? = null
+    private var lastReactionTimestamp: Long = -1
+
     private val _remainingSeconds = MutableStateFlow<Int?>(null)
     val remainingSeconds: StateFlow<Int?> = _remainingSeconds
 
@@ -32,6 +38,21 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
         viewModelScope.launch {
             GameRepository.currentRoom.collect { room ->
                 updateTimerState(room, force = false)
+                val reaction = room?.reaction
+                if (reaction != null && reaction.timestamp != lastReactionTimestamp) {
+                    val isFirstLoad = lastReactionTimestamp == -1L
+                    lastReactionTimestamp = reaction.timestamp
+                    if (!isFirstLoad) {
+                        _pendingReaction.value = reaction.emoji
+                        reactionClearJob?.cancel()
+                        reactionClearJob = viewModelScope.launch {
+                            delay(2500)
+                            _pendingReaction.value = null
+                        }
+                    }
+                } else if (reaction == null && lastReactionTimestamp == -1L) {
+                    lastReactionTimestamp = 0
+                }
             }
         }
     }
@@ -166,6 +187,12 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
     fun rejectUndo() {
         viewModelScope.launch {
             try { GameRepository.rejectUndo() } catch (e: Exception) { _errorMessage.value = "Failed to reject undo: ${e.message}" }
+        }
+    }
+
+    fun sendReaction(emoji: String) {
+        viewModelScope.launch {
+            try { GameRepository.sendReaction(emoji) } catch (e: Exception) { /* silent */ }
         }
     }
 

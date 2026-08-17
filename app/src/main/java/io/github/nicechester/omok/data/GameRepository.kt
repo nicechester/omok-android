@@ -11,6 +11,7 @@ import com.google.firebase.database.database
 import io.github.nicechester.omok.data.model.GameRoom
 import io.github.nicechester.omok.data.model.LastMove
 import io.github.nicechester.omok.data.model.PlayerSeat
+import io.github.nicechester.omok.data.model.Reaction
 import io.github.nicechester.omok.data.model.UndoRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -251,6 +252,14 @@ object GameRepository {
         }
     }
 
+    suspend fun sendReaction(emoji: String) {
+        val gameId = currentGameId ?: return
+        val uid = auth.currentUser?.uid ?: return
+        gamesRef.child(gameId).child("reaction").setValue(
+            mapOf("from" to uid, "emoji" to emoji, "timestamp" to ServerValue.TIMESTAMP)
+        ).await()
+    }
+
     fun listenToGame(gameId: String) {
         currentGameId = gameId
         roomListener?.let { gamesRef.child(gameId).removeEventListener(it) }
@@ -418,6 +427,15 @@ object GameRepository {
             )
         }
 
+        val reactionDict = dict["reaction"] as? Map<String, Any>
+        val reaction = reactionDict?.let {
+            Reaction(
+                from = it["from"] as? String ?: "",
+                emoji = it["emoji"] as? String ?: "",
+                timestamp = (it["timestamp"] as? Number)?.toLong() ?: 0
+            )
+        }
+
         return GameRoom(
             id = gameId,
             status = dict["status"] as? String ?: "waiting",
@@ -434,6 +452,7 @@ object GameRepository {
             timerDuration = (dict["timerDuration"] as? Number)?.toInt(),
             turnStartedAt = (dict["turnStartedAt"] as? Number)?.toLong(),
             undoRequest = undoRequest,
+            reaction = reaction,
             createdAt = (dict["createdAt"] as? Number)?.toLong() ?: 0,
             updatedAt = (dict["updatedAt"] as? Number)?.toLong() ?: 0
         )

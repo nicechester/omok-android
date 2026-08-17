@@ -19,6 +19,12 @@ data class UndoRequest(
     val createdAt: Long = 0
 )
 
+data class Reaction(
+    val from: String = "",
+    val emoji: String = "",
+    val timestamp: Long = 0
+)
+
 data class GameRoom(
     val id: String = "",
     val status: String = "waiting", // waiting, playing, finished
@@ -35,6 +41,7 @@ data class GameRoom(
     val timerDuration: Int? = null,
     val turnStartedAt: Long? = null,
     val undoRequest: UndoRequest? = null,
+    val reaction: Reaction? = null,
     val createdAt: Long = 0,
     val updatedAt: Long = 0
 ) {
