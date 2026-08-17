@@ -1,10 +1,10 @@
 package io.github.nicechester.omok.data
 
 import android.content.Context
-import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -15,6 +15,7 @@ private val Context.dataStore by preferencesDataStore("preferences")
 object PreferencesManager {
     private val PLAYER_NAME_KEY = stringPreferencesKey("playerName")
     private val TIMER_PREFERENCE_KEY = intPreferencesKey("timerDuration")
+    private val NOTIFICATIONS_KEY = booleanPreferencesKey("notificationsEnabled")
 
     fun getPlayerName(context: Context): Flow<String> =
         context.dataStore.data.map { it[PLAYER_NAME_KEY] ?: "" }
@@ -28,6 +29,13 @@ object PreferencesManager {
 
     suspend fun setTimerPreference(context: Context, seconds: Int) {
         context.dataStore.edit { it[TIMER_PREFERENCE_KEY] = seconds }
+    }
+
+    fun getNotificationsEnabled(context: Context): Flow<Boolean> =
+        context.dataStore.data.map { it[NOTIFICATIONS_KEY] ?: true }
+
+    suspend fun setNotificationsEnabled(context: Context, enabled: Boolean) {
+        context.dataStore.edit { it[NOTIFICATIONS_KEY] = enabled }
     }
 
     fun isFirstRun(context: Context): Flow<Boolean> =
