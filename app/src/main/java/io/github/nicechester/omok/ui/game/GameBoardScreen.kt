@@ -24,12 +24,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.IosShare
+import androidx.compose.material.icons.filled.SentimentSatisfied
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -63,10 +68,13 @@ fun GameBoardScreen(
     onLeave: () -> Unit,
     onRequestUndo: () -> Unit = {},
     onApproveUndo: () -> Unit = {},
-    onRejectUndo: () -> Unit = {}
+    onRejectUndo: () -> Unit = {},
+    onSendReaction: (String) -> Unit = {},
+    pendingReaction: String? = null
 ) {
     val uid = Firebase.auth.currentUser?.uid
     val mySeat = uid?.let { room.seatOf(it) }
+    var showEmojiTray by remember { mutableStateOf(false) }
     val canPlay = room.isPlaying() && mySeat != null && room.turn == mySeat && room.undoRequest == null
     val canRequestUndo = room.isPlaying() && mySeat != null && room.moveCount >= 2
         && room.undoRequest == null && room.turn != mySeat
@@ -320,7 +328,7 @@ fun GameBoardScreen(
             }
         }
 
-        // Bottom action bar — Undo center, Resign right (matches iOS)
+        // Bottom action bar + emoji tray (matches iOS layout)
         if (!room.isFinished()) {
             Spacer(modifier = Modifier.height(8.dp))
             Row(
@@ -330,10 +338,11 @@ fun GameBoardScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Placeholder mic button (left) — matches iOS layout
-                Box(modifier = Modifier.size(48.dp))
-
-                // Undo
+                Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                    IconButton(onClick = { showEmojiTray = !showEmojiTray }) {
+                        Icon(Icons.Default.SentimentSatisfied, contentDescription = "React", modifier = Modifier.size(28.dp))
+                    }
+                }
                 Button(
                     onClick = onRequestUndo,
                     modifier = Modifier.weight(1f),
@@ -348,8 +357,6 @@ fun GameBoardScreen(
                 ) {
                     Text(if (room.undoRequest != null && room.undoRequest.requestedBy == uid) "Undo…" else "↩ Undo")
                 }
-
-                // Resign — right
                 Button(
                     onClick = onForfeit,
                     modifier = Modifier.weight(1f),
@@ -362,8 +369,30 @@ fun GameBoardScreen(
                     Text("🚩 Resign")
                 }
             }
+            // Emoji tray — toggles on smiley tap, matches iOS
+            if (showEmojiTray) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    listOf("😄", "😮", "👏", "🤔", "😅", "🎉").forEach { emoji ->
+                        IconButton(onClick = { onSendReaction(emoji); showEmojiTray = false }) {
+                            Text(emoji, fontSize = 28.sp)
+                        }
+                    }
+                }
+            }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        if (pendingReaction != null) {
+            Box(
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(pendingReaction, fontSize = 40.sp)
+            }
+        }
     }
 }

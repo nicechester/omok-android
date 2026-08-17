@@ -47,6 +47,7 @@ fun GameScreen(paddingValues: PaddingValues, viewModel: GameScreenViewModel? = n
     val resolvedViewModel: GameScreenViewModel = viewModel ?: viewModel { GameScreenViewModel(context) }
     val currentRoom = resolvedViewModel.currentRoom.collectAsState()
     val errorMessage by resolvedViewModel.errorMessage.collectAsState()
+    val pendingReaction by resolvedViewModel.pendingReaction.collectAsState()
 
     if (errorMessage != null) {
         AlertDialog(
@@ -89,7 +90,9 @@ fun GameScreen(paddingValues: PaddingValues, viewModel: GameScreenViewModel? = n
             onLeave = { resolvedViewModel.leaveGame() },
             onRequestUndo = { resolvedViewModel.requestUndo() },
             onApproveUndo = { resolvedViewModel.approveUndo() },
-            onRejectUndo = { resolvedViewModel.rejectUndo() }
+            onRejectUndo = { resolvedViewModel.rejectUndo() },
+            onSendReaction = { resolvedViewModel.sendReaction(it) },
+            pendingReaction = pendingReaction
         )
     } else {
         Box(
