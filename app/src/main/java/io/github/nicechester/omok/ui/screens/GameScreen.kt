@@ -153,9 +153,9 @@ fun GameScreen(paddingValues: PaddingValues, viewModel: GameScreenViewModel? = n
             ModalBottomSheet(onDismissRequest = { showGameSetup.value = false }) {
                 GameSetupSheet(
                     onDismiss = { showGameSetup.value = false },
-                    onStartGame = { gameId, isAI, timerSeconds, _ ->
+                    onStartGame = { gameId, isAI, timerSeconds, _, difficulty ->
                         val code = if (isAI) generateGameId() else gameId
-                        resolvedViewModel.joinOrCreateGame(code, timerSeconds)
+                        resolvedViewModel.joinOrCreateGame(code, timerSeconds, isAI, difficulty)
                         showGameSetup.value = false
                     }
                 )

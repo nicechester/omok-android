@@ -5,10 +5,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import io.github.nicechester.omok.data.FirebaseGameRepository
 import io.github.nicechester.omok.data.GameRepository
+import io.github.nicechester.omok.data.LocalGameRepository
 import io.github.nicechester.omok.data.PreferencesManager
 import io.github.nicechester.omok.data.RecentRoomsManager
 import io.github.nicechester.omok.data.model.GameRoom
+import io.github.nicechester.omok.game.AIDifficulty
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,7 +19,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
-    val currentRoom: StateFlow<GameRoom?> = GameRepository.currentRoom
+
+    private var repository: GameRepository = FirebaseGameRepository()
+    private val _currentRoom = MutableStateFlow<GameRoom?>(null)
+    val currentRoom: StateFlow<GameRoom?> = _currentRoom
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage
@@ -31,12 +37,16 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
     val remainingSeconds: StateFlow<Int?> = _remainingSeconds
 
     private var timerJob: Job? = null
-    private var timerAnchor: Pair<String, Long>? = null // turn to turnStartedAt
+    private var timerAnchor: Pair<String, Long>? = null
     private var isPaused = false
 
-    init {
-        viewModelScope.launch {
-            GameRepository.currentRoom.collect { room ->
+    private var roomCollectJob: Job? = null
+
+    private fun startCollecting() {
+        roomCollectJob?.cancel()
+        roomCollectJob = viewModelScope.launch {
+            repository.currentRoom.collect { room ->
+                _currentRoom.value = room
                 updateTimerState(room, force = false)
                 val reaction = room?.reaction
                 if (reaction != null && reaction.timestamp != lastReactionTimestamp) {
@@ -57,9 +67,12 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
         }
     }
 
+
+    init { startCollecting() }
+
     fun onResume() {
         isPaused = false
-        updateTimerState(GameRepository.currentRoom.value, force = true)
+        updateTimerState(repository.currentRoom.value, force = true)
     }
 
     fun onPause() {
@@ -69,18 +82,10 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
     }
 
     private fun updateTimerState(room: GameRoom?, force: Boolean) {
-        if (isPaused) {
-            timerJob?.cancel(); timerJob = null; return
-        }
-        if (room == null || !room.isPlaying()) {
-            timerJob?.cancel(); timerJob = null; _remainingSeconds.value = null; return
-        }
-        val duration = room.timerDuration ?: run {
-            timerJob?.cancel(); timerJob = null; _remainingSeconds.value = null; return
-        }
-        val turnStartedAt = room.turnStartedAt ?: run {
-            timerJob?.cancel(); timerJob = null; _remainingSeconds.value = null; return
-        }
+        if (isPaused) { timerJob?.cancel(); timerJob = null; return }
+        if (room == null || !room.isPlaying()) { timerJob?.cancel(); timerJob = null; _remainingSeconds.value = null; return }
+        val duration = room.timerDuration ?: run { timerJob?.cancel(); timerJob = null; _remainingSeconds.value = null; return }
+        val turnStartedAt = room.turnStartedAt ?: run { timerJob?.cancel(); timerJob = null; _remainingSeconds.value = null; return }
         val needsRestart = force || timerAnchor?.first != room.turn || timerAnchor?.second != turnStartedAt
         if (needsRestart) {
             timerJob?.cancel()
@@ -91,16 +96,15 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
 
     private fun startTicking(turn: String, turnStartedAt: Long, duration: Int) {
         timerJob = viewModelScope.launch {
-            val gameId = GameRepository.currentRoom.value?.id ?: return@launch
+            val gameId = _currentRoom.value?.id ?: return@launch
             while (true) {
                 if (isPaused) return@launch
                 val now = System.currentTimeMillis()
-                val elapsed = now - turnStartedAt
-                val remaining = maxOf(0L, duration * 1000L - elapsed)
+                val remaining = maxOf(0L, duration * 1000L - (now - turnStartedAt))
                 val remainingInt = minOf(duration, ((remaining + 999) / 1000).toInt())
                 _remainingSeconds.value = remainingInt
                 if (remainingInt <= 0) {
-                    GameRepository.autoPassTurn(gameId, turn, turnStartedAt)
+                    repository.autoPassTurn(gameId, turn, turnStartedAt)
                     return@launch
                 }
                 delay(1000)
@@ -108,17 +112,23 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
         }
     }
 
-    fun joinOrCreateGame(gameId: String, timerSeconds: Int = 0) {
+    fun joinOrCreateGame(gameId: String, timerSeconds: Int = 0, isAI: Boolean = false, difficulty: AIDifficulty = AIDifficulty.NORMAL) {
         viewModelScope.launch {
             try {
-                // Wait for auth if not ready yet
-                if (com.google.firebase.Firebase.auth.currentUser == null) {
-                    android.util.Log.d("GameScreenViewModel", "Waiting for auth...")
-                    kotlinx.coroutines.delay(2000)
+                if (Firebase.auth.currentUser == null) delay(2000)
+                val uid = Firebase.auth.currentUser?.uid ?: run {
+                    _errorMessage.value = "Not authenticated"
+                    return@launch
                 }
                 val playerName = context?.let { PreferencesManager.getPlayerNameOnce(it) } ?: "Player"
-                android.util.Log.d("GameScreenViewModel", "joinOrCreateGame: gameId=$gameId, player=$playerName")
-            val success = GameRepository.joinOrCreateGame(gameId, playerName, timerSeconds)
+
+                // Swap repository based on game mode
+                repository.stopListening()
+                repository = if (isAI) LocalGameRepository(difficulty, uid) else FirebaseGameRepository()
+                lastReactionTimestamp = -1
+                startCollecting()
+
+                val success = repository.joinOrCreateGame(gameId, playerName, timerSeconds)
                 if (success) {
                     context?.let { RecentRoomsManager.recordPlay(it, gameId) }
                 } else {
@@ -133,7 +143,7 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
     fun makeMove(row: Int, col: Int) {
         viewModelScope.launch {
             try {
-                GameRepository.makeMove(row, col)
+                repository.makeMove(row, col)
             } catch (e: IllegalStateException) {
                 if (e.message == "double_open_three") {
                     _errorMessage.value = "Cannot create two open threes in one move (3×3 rule)."
@@ -148,24 +158,17 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
 
     fun forfeit() {
         viewModelScope.launch {
-            try {
-                GameRepository.forfeit()
-            } catch (e: Exception) {
-                _errorMessage.value = "Failed to forfeit: ${e.message}"
-            }
+            try { repository.forfeit() } catch (e: Exception) { _errorMessage.value = "Failed to forfeit: ${e.message}" }
         }
     }
 
     fun voteRematch() {
         viewModelScope.launch {
             try {
-                GameRepository.voteRematch()
-                // Only creator drives reset to avoid race — mirrors iOS
-                val room = currentRoom.value ?: return@launch
+                repository.voteRematch()
+                val room = _currentRoom.value ?: return@launch
                 val uid = Firebase.auth.currentUser?.uid ?: return@launch
-                if (room.createdBy == uid) {
-                    GameRepository.resetForRematch()
-                }
+                if (room.createdBy == uid) repository.resetForRematch()
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to rematch: ${e.message}"
             }
@@ -174,30 +177,30 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
 
     fun requestUndo() {
         viewModelScope.launch {
-            try { GameRepository.requestUndo() } catch (e: Exception) { _errorMessage.value = "Failed to request undo: ${e.message}" }
+            try { repository.requestUndo() } catch (e: Exception) { _errorMessage.value = "Failed to request undo: ${e.message}" }
         }
     }
 
     fun approveUndo() {
         viewModelScope.launch {
-            try { GameRepository.approveUndo() } catch (e: Exception) { _errorMessage.value = "Failed to approve undo: ${e.message}" }
+            try { repository.approveUndo() } catch (e: Exception) { _errorMessage.value = "Failed to approve undo: ${e.message}" }
         }
     }
 
     fun rejectUndo() {
         viewModelScope.launch {
-            try { GameRepository.rejectUndo() } catch (e: Exception) { _errorMessage.value = "Failed to reject undo: ${e.message}" }
+            try { repository.rejectUndo() } catch (e: Exception) { _errorMessage.value = "Failed to reject undo: ${e.message}" }
         }
     }
 
     fun sendReaction(emoji: String) {
         viewModelScope.launch {
-            try { GameRepository.sendReaction(emoji) } catch (e: Exception) { /* silent */ }
+            try { repository.sendReaction(emoji) } catch (e: Exception) { /* silent */ }
         }
     }
 
     fun leaveGame() {
-        GameRepository.stopListening()
+        repository.stopListening()
     }
 
     fun clearError() {

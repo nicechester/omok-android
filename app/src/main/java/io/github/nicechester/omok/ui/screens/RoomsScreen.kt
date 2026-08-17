@@ -74,7 +74,7 @@ fun RoomsScreen(
         ) {
             GameSetupSheet(
                 onDismiss = { showNewGame.value = false },
-                onStartGame = { gameId, _, _, _ ->
+                onStartGame = { gameId, _, _, _, _ ->
                     onJoinRoom(gameId)
                     showNewGame.value = false
                 }
