@@ -58,7 +58,10 @@ fun OmokApp() {
             },
             bottomBar = { BottomNavBar(navController) }
         ) { paddingValues ->
-            OmokNavHost(navController = navController, paddingValues = paddingValues)
+            OmokNavHost(
+                navController = navController,
+                paddingValues = paddingValues
+            )
         }
     }
 }
