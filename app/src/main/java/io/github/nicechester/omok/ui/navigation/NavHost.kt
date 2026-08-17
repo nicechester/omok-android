@@ -12,6 +12,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import io.github.nicechester.omok.firebase.PendingGameNavigation
 import io.github.nicechester.omok.ui.game.GameScreenViewModel
+import io.github.nicechester.omok.ui.screens.HelpScreen
 import io.github.nicechester.omok.ui.screens.GameScreen
 import io.github.nicechester.omok.ui.screens.RoomsScreen
 import io.github.nicechester.omok.ui.screens.SettingsScreen
@@ -51,6 +52,9 @@ fun OmokNavHost(
         }
         composable("settings") {
             SettingsScreen(paddingValues = paddingValues)
+        }
+        composable("help") {
+            HelpScreen(paddingValues = paddingValues)
         }
     }
 }

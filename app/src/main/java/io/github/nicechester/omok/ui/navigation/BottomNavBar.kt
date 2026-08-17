@@ -2,6 +2,7 @@ package io.github.nicechester.omok.ui.navigation
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -42,9 +43,21 @@ fun BottomNavBar(navController: NavHostController) {
             onClick = {
                 if (currentRoute != "play") {
                     navController.navigate("play") {
-                        popUpTo(navController.graph.startDestinationId) {
-                            saveState = true
-                        }
+                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            }
+        )
+        NavigationBarItem(
+            icon = { Icon(Icons.Default.Info, contentDescription = "Help") },
+            label = { Text("Help") },
+            selected = currentRoute == "help",
+            onClick = {
+                if (currentRoute != "help") {
+                    navController.navigate("help") {
+                        popUpTo(navController.graph.startDestinationId) { saveState = true }
                         launchSingleTop = true
                         restoreState = true
                     }
