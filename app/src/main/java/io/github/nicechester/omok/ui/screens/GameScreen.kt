@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.nicechester.omok.ui.game.GameBoardScreen
 import io.github.nicechester.omok.ui.game.GameScreenViewModel
+import io.github.nicechester.omok.firebase.ActiveGameTracker
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -69,6 +70,11 @@ fun GameScreen(paddingValues: PaddingValues, viewModel: GameScreenViewModel? = n
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    DisposableEffect(currentRoom.value?.id) {
+        ActiveGameTracker.activeGameId = currentRoom.value?.id
+        onDispose { ActiveGameTracker.activeGameId = null }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
