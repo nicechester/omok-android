@@ -40,9 +40,7 @@ class MainActivity : ComponentActivity() {
             requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
 
-        intent?.getStringExtra("gameId")?.let {
-            PendingGameNavigation.request(it)
-        }
+        resolveGameId(intent)?.let { PendingGameNavigation.request(it) }
 
         setContent {
             OmokTheme {
@@ -59,8 +57,15 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        intent.getStringExtra("gameId")?.let {
-            PendingGameNavigation.request(it)
+        resolveGameId(intent)?.let { PendingGameNavigation.request(it) }
+    }
+
+    private fun resolveGameId(intent: Intent?): String? {
+        intent?.data?.let { uri ->
+            if (uri.host == "omok-5-in-a-row.web.app") {
+                return uri.lastPathSegment
+            }
         }
+        return intent?.getStringExtra("gameId")
     }
 }
