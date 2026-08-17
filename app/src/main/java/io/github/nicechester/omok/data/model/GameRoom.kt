@@ -42,11 +42,14 @@ data class GameRoom(
     val turnStartedAt: Long? = null,
     val undoRequest: UndoRequest? = null,
     val reaction: Reaction? = null,
+    val aiDifficulty: String? = null,
     val createdAt: Long = 0,
     val updatedAt: Long = 0
 ) {
     val blackSeat: PlayerSeat? get() = players.values.find { it.color == "black" }
     val whiteSeat: PlayerSeat? get() = players.values.find { it.color == "white" }
+    val isAI: Boolean get() = players.containsKey("ai-player")
+    val aiColor: String get() = players["ai-player"]?.color ?: "white"
 
     fun seatOf(uid: String): String? = players[uid]?.color
 

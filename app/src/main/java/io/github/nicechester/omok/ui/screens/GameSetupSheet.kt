@@ -19,15 +19,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.nicechester.omok.game.AIDifficulty
 
 @Composable
 fun GameSetupSheet(
     onDismiss: () -> Unit,
-    onStartGame: (gameId: String, isAI: Boolean, timerSeconds: Int, isCreating: Boolean) -> Unit
+    onStartGame: (gameId: String, isAI: Boolean, timerSeconds: Int, isCreating: Boolean, difficulty: AIDifficulty) -> Unit
 ) {
     val isAIGame = remember { mutableStateOf(false) }
     val roomCode = remember { mutableStateOf(generateGameId()) }
     val timerSeconds = remember { mutableStateOf(0) }
+    val difficulty = remember { mutableStateOf(AIDifficulty.NORMAL) }
 
     Column(
         modifier = Modifier
@@ -57,6 +59,24 @@ fun GameSetupSheet(
                         ButtonDefaults.buttonColors(containerColor = Color(0xFF0066FF))
                     else ButtonDefaults.outlinedButtonColors()
                 ) { Text("vs AI") }
+            }
+        }
+
+        // Difficulty (vs AI only)
+        if (isAIGame.value) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(text = "Difficulty", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AIDifficulty.entries.forEach { level ->
+                        Button(
+                            onClick = { difficulty.value = level },
+                            modifier = Modifier.weight(1f),
+                            colors = if (difficulty.value == level)
+                                ButtonDefaults.buttonColors(containerColor = Color(0xFF0066FF))
+                            else ButtonDefaults.outlinedButtonColors()
+                        ) { Text(level.displayName) }
+                    }
+                }
             }
         }
 
@@ -98,7 +118,7 @@ fun GameSetupSheet(
 
         // Join / Start button
         Button(
-            onClick = { onStartGame(roomCode.value, isAIGame.value, timerSeconds.value, false) },
+            onClick = { onStartGame(roomCode.value, isAIGame.value, timerSeconds.value, false, difficulty.value) },
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0066FF)),
             enabled = isAIGame.value || roomCode.value.isNotEmpty()
