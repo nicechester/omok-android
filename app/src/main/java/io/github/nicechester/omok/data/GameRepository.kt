@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 interface GameRepository {
     val currentRoom: StateFlow<GameRoom?>
-    suspend fun joinOrCreateGame(gameId: String, playerName: String, timerDuration: Int = 0): Boolean
+    suspend fun joinOrCreateGame(gameId: String, uid: String, playerName: String, timerDuration: Int = 0): Boolean
     suspend fun makeMove(row: Int, col: Int): Boolean
     suspend fun forfeit()
     suspend fun voteRematch()

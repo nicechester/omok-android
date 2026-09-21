@@ -48,8 +48,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.firebase.Firebase
-import com.google.firebase.auth.auth
 import io.github.nicechester.omok.data.model.GameRoom
 import kotlin.math.roundToInt
 
@@ -62,6 +60,7 @@ private const val BOARD_SIZE = 15
 fun GameBoardScreen(
     room: GameRoom,
     remainingSeconds: Int? = null,
+    myUID: String? = null,
     onMakeMove: (row: Int, col: Int) -> Unit,
     onForfeit: () -> Unit,
     onRematch: () -> Unit,
@@ -72,7 +71,7 @@ fun GameBoardScreen(
     onSendReaction: (String) -> Unit = {},
     pendingReaction: String? = null
 ) {
-    val uid = Firebase.auth.currentUser?.uid
+    val uid = myUID
     val mySeat = uid?.let { room.seatOf(it) }
     var showEmojiTray by remember { mutableStateOf(false) }
     val canPlay = room.isPlaying() && mySeat != null && room.turn == mySeat && room.undoRequest == null

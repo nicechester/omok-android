@@ -19,7 +19,7 @@ class OmokApplication : Application() {
         FirebaseApp.initializeApp(this)
         OmokFirebaseMessagingService.createNotificationChannel(this)
         CoroutineScope(Dispatchers.IO).launch {
-            FirebaseManager.initialize()
+            FirebaseManager.initialize(this@OmokApplication)
             FirebaseManager.isAuthenticated.first { it }
             try {
                 val token = FirebaseMessaging.getInstance().token.await()
