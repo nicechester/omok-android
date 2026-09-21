@@ -1,6 +1,7 @@
 package io.github.nicechester.omok.ui.game
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
@@ -11,6 +12,7 @@ import io.github.nicechester.omok.data.LocalGameRepository
 import io.github.nicechester.omok.data.PreferencesManager
 import io.github.nicechester.omok.data.RecentRoomsManager
 import io.github.nicechester.omok.data.model.GameRoom
+import io.github.nicechester.omok.firebase.FirebaseManager
 import io.github.nicechester.omok.game.AIDifficulty
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -39,9 +41,12 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
     private var timerJob: Job? = null
     private var timerAnchor: Pair<String, Long>? = null
     private var isPaused = false
+    private var previousRoom: GameRoom? = null
 
     private var roomCollectJob: Job? = null
 
+    private val _effectiveUID = MutableStateFlow<String?>(null)
+    val effectiveUID: StateFlow<String?> = _effectiveUID
     private fun startCollecting() {
         roomCollectJob?.cancel()
         roomCollectJob = viewModelScope.launch {
@@ -63,6 +68,20 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
                 } else if (reaction == null && lastReactionTimestamp == -1L) {
                     lastReactionTimestamp = 0
                 }
+
+                // Both voted rematch: drive reset when votes just reached 2
+                // resetForRematch is idempotent (checks status==finished), so both sides calling it is safe
+                val prevVotes = previousRoom?.rematchVotes?.size ?: 0
+                if (room != null && room.isFinished() && room.rematchVotes.size >= 2) {
+                    val effectiveUID = (repository as? FirebaseGameRepository)?.effectiveUID ?: ""
+                    if (prevVotes < 2 && room.players.containsKey(effectiveUID)) {
+                        viewModelScope.launch {
+                            try { repository.resetForRematch() } catch (e: Exception) { /* silent */ }
+                        }
+                    }
+                }
+
+                previousRoom = room
             }
         }
     }
@@ -116,21 +135,21 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
         viewModelScope.launch {
             try {
                 if (Firebase.auth.currentUser == null) delay(2000)
-                val uid = Firebase.auth.currentUser?.uid ?: run {
-                    _errorMessage.value = "Not authenticated"
-                    return@launch
-                }
-                val playerName = context?.let { PreferencesManager.getPlayerNameOnce(it) } ?: "Player"
+                if (Firebase.auth.currentUser == null) { _errorMessage.value = "Not authenticated"; return@launch }
+                val ctx = context ?: run { _errorMessage.value = "No context"; return@launch }
+                val deviceUID = FirebaseManager.getDeviceUID(ctx)
+                if (deviceUID.isEmpty()) { _errorMessage.value = "Device UID unavailable"; return@launch }
+                val playerName = PreferencesManager.getPlayerNameOnce(ctx)
 
-                // Swap repository based on game mode
                 repository.stopListening()
-                repository = if (isAI) LocalGameRepository(difficulty, uid) else FirebaseGameRepository()
+                repository = if (isAI) LocalGameRepository(difficulty, deviceUID) else FirebaseGameRepository()
                 lastReactionTimestamp = -1
                 startCollecting()
 
-                val success = repository.joinOrCreateGame(gameId, playerName, timerSeconds)
+                val success = repository.joinOrCreateGame(gameId, deviceUID, playerName, timerSeconds)
                 if (success) {
-                    context?.let { RecentRoomsManager.recordPlay(it, gameId) }
+                    _effectiveUID.value = (repository as? FirebaseGameRepository)?.effectiveUID ?: deviceUID
+                    RecentRoomsManager.recordPlay(ctx, gameId)
                 } else {
                     _errorMessage.value = "Failed to join or create game"
                 }
@@ -166,9 +185,6 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
         viewModelScope.launch {
             try {
                 repository.voteRematch()
-                val room = _currentRoom.value ?: return@launch
-                val uid = Firebase.auth.currentUser?.uid ?: return@launch
-                if (room.createdBy == uid) repository.resetForRematch()
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to rematch: ${e.message}"
             }

@@ -16,6 +16,7 @@ object PreferencesManager {
     private val PLAYER_NAME_KEY = stringPreferencesKey("playerName")
     private val TIMER_PREFERENCE_KEY = intPreferencesKey("timerDuration")
     private val NOTIFICATIONS_KEY = booleanPreferencesKey("notificationsEnabled")
+    private val DEVICE_UID_KEY = stringPreferencesKey("deviceUID")
 
     fun getPlayerName(context: Context): Flow<String> =
         context.dataStore.data.map { it[PLAYER_NAME_KEY] ?: "" }
@@ -43,4 +44,14 @@ object PreferencesManager {
 
     suspend fun getPlayerNameOnce(context: Context): String =
         getPlayerName(context).first()
+
+    fun getDeviceUID(context: Context): Flow<String> =
+        context.dataStore.data.map { it[DEVICE_UID_KEY] ?: "" }
+
+    suspend fun getDeviceUIDOnce(context: Context): String =
+        getDeviceUID(context).first()
+
+    suspend fun setDeviceUID(context: Context, uid: String) {
+        context.dataStore.edit { it[DEVICE_UID_KEY] = uid }
+    }
 }

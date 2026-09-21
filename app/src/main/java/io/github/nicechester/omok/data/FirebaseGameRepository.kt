@@ -21,6 +21,7 @@ import kotlinx.coroutines.tasks.await
 open class FirebaseGameRepository : GameRepository {
     private val tag = "FirebaseGameRepository"
     protected val gamesRef = Firebase.database("https://omok-5-in-a-row-default-rtdb.firebaseio.com").getReference("omok/games")
+    private val uidMappingsRef = Firebase.database("https://omok-5-in-a-row-default-rtdb.firebaseio.com").getReference("omok/uidMappings")
     private val auth = Firebase.auth
 
     private val _currentRoom = MutableStateFlow<GameRoom?>(null)
@@ -29,18 +30,15 @@ open class FirebaseGameRepository : GameRepository {
     private var roomListener: ValueEventListener? = null
     protected var currentGameId: String? = null
 
-    override suspend fun joinOrCreateGame(gameId: String, playerName: String, timerDuration: Int): Boolean {
-        val uid = auth.currentUser?.uid ?: run {
-            Log.e(tag, "joinOrCreateGame: not authenticated")
-            return false
-        }
+    override suspend fun joinOrCreateGame(gameId: String, uid: String, playerName: String, timerDuration: Int): Boolean {
         val ref = gamesRef.child(gameId)
         return try {
             val snapshot = ref.get().await()
             if (!snapshot.exists()) {
                 createGame(ref, uid, playerName, timerDuration)
+                effectiveUID = uid
             } else {
-                claimSeat(ref, uid, playerName)
+                effectiveUID = claimSeat(ref, uid, playerName)
             }
             listenToGame(gameId)
             true
@@ -75,9 +73,24 @@ open class FirebaseGameRepository : GameRepository {
         ref.setValue(data).await()
     }
 
-    private suspend fun claimSeat(ref: DatabaseReference, uid: String, playerName: String) {
+    /** Effective UID after seat claiming (may differ from passed-in uid if migrated from old Firebase UID). */
+    var effectiveUID: String = ""
+        protected set
+
+    private suspend fun allKnownUIDs(deviceUID: String): Set<String> {
+        val uids = mutableSetOf(deviceUID)
+        try {
+            val snapshot = uidMappingsRef.child(deviceUID).child("firebaseUids").get().await()
+            @Suppress("UNCHECKED_CAST")
+            (snapshot.value as? List<String>)?.let { uids.addAll(it) }
+        } catch (_: Exception) {}
+        return uids
+    }
+
+    /** uid is the device UID. Returns effectiveUID (device UID, possibly migrated from old Firebase UID). */
+    private suspend fun claimSeat(ref: DatabaseReference, uid: String, playerName: String): String {
         val snapshot = ref.get().await()
-        val dict = snapshot.value as? Map<String, Any> ?: return
+        val dict = snapshot.value as? Map<String, Any> ?: return uid
         val players = dict["players"] as? Map<String, Any> ?: emptyMap()
         val sanitized = playerName.trim().take(20)
 
@@ -87,7 +100,23 @@ open class FirebaseGameRepository : GameRepository {
                 ref.child("players/$uid/name").setValue(sanitized).await()
                 ref.child("updatedAt").setValue(ServerValue.TIMESTAMP).await()
             }
-            return
+            return uid
+        }
+
+        // Backward compat: check if seated under an old Firebase UID mapped to this device UID
+        val knownUIDs = allKnownUIDs(uid)
+        for ((playerUid, playerData) in players) {
+            if (!knownUIDs.contains(playerUid) || playerUid == uid) continue
+            val playerDict = playerData as? Map<String, Any> ?: continue
+            if (playerDict["color"] == null) continue
+            val migratedPlayer = playerDict.toMutableMap()
+            if (sanitized.isNotEmpty()) migratedPlayer["name"] = sanitized
+            ref.child("players/$playerUid").removeValue().await()
+            ref.updateChildren(mapOf(
+                "players/$uid" to migratedPlayer,
+                "updatedAt" to ServerValue.TIMESTAMP
+            )).await()
+            return uid
         }
 
         val takenColors = players.values
@@ -109,11 +138,11 @@ open class FirebaseGameRepository : GameRepository {
         )
         if (takenColors.size == 1) updates["status"] = "playing"
         ref.updateChildren(updates).await()
+        return uid
     }
 
     override suspend fun makeMove(row: Int, col: Int): Boolean {
-        val uid = auth.currentUser?.uid ?: return false
-        return makeMoveAs(uid, row, col)
+        return makeMoveAs(effectiveUID, row, col)
     }
 
     suspend fun makeMoveAs(uid: String, row: Int, col: Int): Boolean {
@@ -126,7 +155,8 @@ open class FirebaseGameRepository : GameRepository {
 
             val turn = dict["turn"] as? String ?: return false
             val players = dict["players"] as? Map<String, Any> ?: return false
-            val playerColor = (players[uid] as? Map<String, Any>)?.get("color") as? String ?: return false
+            val playerColor = (players[uid] as? Map<String, Any>)?.get("color") as? String
+            if (playerColor == null) return false
             if (playerColor != turn) return false
 
             val cellKey = "${row}_${col}"
@@ -173,7 +203,7 @@ open class FirebaseGameRepository : GameRepository {
 
     override suspend fun forfeit() {
         val gameId = currentGameId ?: return
-        val uid = auth.currentUser?.uid ?: return
+        val uid = effectiveUID.ifEmpty { return }
         val ref = gamesRef.child(gameId)
         try {
             val snapshot = ref.get().await()
@@ -203,7 +233,7 @@ open class FirebaseGameRepository : GameRepository {
 
     override suspend fun voteRematch() {
         val gameId = currentGameId ?: return
-        val uid = auth.currentUser?.uid ?: return
+        val uid = effectiveUID.ifEmpty { return }
         gamesRef.child(gameId).child("rematch").child(uid).setValue(true).await()
     }
 
@@ -239,7 +269,7 @@ open class FirebaseGameRepository : GameRepository {
 
     override suspend fun sendReaction(emoji: String) {
         val gameId = currentGameId ?: return
-        val uid = auth.currentUser?.uid ?: return
+        val uid = effectiveUID.ifEmpty { return }
         gamesRef.child(gameId).child("reaction").setValue(
             mapOf("from" to uid, "emoji" to emoji, "timestamp" to ServerValue.TIMESTAMP)
         ).await()
@@ -263,7 +293,7 @@ open class FirebaseGameRepository : GameRepository {
 
     override suspend fun requestUndo() {
         val gameId = currentGameId ?: return
-        val uid = auth.currentUser?.uid ?: return
+        val uid = effectiveUID.ifEmpty { return }
         val ref = gamesRef.child(gameId)
         try {
             val snapshot = ref.get().await()
@@ -414,6 +444,9 @@ open class FirebaseGameRepository : GameRepository {
             )
         }
 
+        val rematchVotes = (dict["rematch"] as? Map<String, Any>)
+            ?.filterValues { it == true }?.keys?.toSet() ?: emptySet()
+
         return GameRoom(
             id = gameId,
             status = dict["status"] as? String ?: "waiting",
@@ -432,6 +465,7 @@ open class FirebaseGameRepository : GameRepository {
             undoRequest = undoRequest,
             reaction = reaction,
             aiDifficulty = dict["aiDifficulty"] as? String,
+            rematchVotes = rematchVotes,
             createdAt = (dict["createdAt"] as? Number)?.toLong() ?: 0,
             updatedAt = (dict["updatedAt"] as? Number)?.toLong() ?: 0
         )

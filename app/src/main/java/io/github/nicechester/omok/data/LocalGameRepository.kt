@@ -54,7 +54,7 @@ class LocalGameRepository(
 
     // After human places a stone, trigger AI move
     override suspend fun makeMove(row: Int, col: Int): Boolean {
-        val success = makeMoveAs(humanUid, row, col)
+        val success = makeMoveAs(effectiveUID.ifEmpty { humanUid }, row, col)
         if (success) performAIMove()
         return success
     }

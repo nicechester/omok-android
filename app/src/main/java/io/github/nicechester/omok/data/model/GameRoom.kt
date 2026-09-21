@@ -43,6 +43,7 @@ data class GameRoom(
     val undoRequest: UndoRequest? = null,
     val reaction: Reaction? = null,
     val aiDifficulty: String? = null,
+    val rematchVotes: Set<String> = emptySet(),
     val createdAt: Long = 0,
     val updatedAt: Long = 0
 ) {

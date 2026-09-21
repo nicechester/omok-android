@@ -84,6 +84,7 @@ fun GameScreen(paddingValues: PaddingValues, viewModel: GameScreenViewModel? = n
         GameBoardScreen(
             room = currentRoom.value!!,
             remainingSeconds = resolvedViewModel.remainingSeconds.collectAsState().value,
+            myUID = resolvedViewModel.effectiveUID.collectAsState().value,
             onMakeMove = { row, col -> resolvedViewModel.makeMove(row, col) },
             onForfeit = { resolvedViewModel.forfeit() },
             onRematch = { resolvedViewModel.voteRematch() },
