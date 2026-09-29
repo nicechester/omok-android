@@ -1,6 +1,8 @@
 package io.github.nicechester.omok.ui.game
 
+import android.graphics.BitmapFactory
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -48,8 +50,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.asImageBitmap
 import io.github.nicechester.omok.data.model.GameRoom
 import kotlin.math.roundToInt
+
+@Composable
+private fun OpenMojiReaction(hexcode: String) {
+    val context = LocalContext.current
+    val bitmap = remember(hexcode) {
+        runCatching {
+            context.assets.open("openmoji/$hexcode.png").use { BitmapFactory.decodeStream(it) }
+        }.getOrNull()
+    }
+    if (bitmap != null) {
+        Image(bitmap = bitmap.asImageBitmap(), contentDescription = null, modifier = Modifier.size(56.dp))
+    }
+}
 
 private val BoardColor = Color(0xFFDCB468)
 private val LineColor = Color(0xFF3A2A00)
@@ -368,29 +384,20 @@ fun GameBoardScreen(
                     Text("🚩 Resign")
                 }
             }
-            // Emoji tray — toggles on smiley tap, matches iOS
             if (showEmojiTray) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    listOf("😄", "😮", "👏", "🤔", "😅", "🎉").forEach { emoji ->
-                        IconButton(onClick = { onSendReaction(emoji); showEmojiTray = false }) {
-                            Text(emoji, fontSize = 28.sp)
-                        }
-                    }
-                }
+                EmojiPickerSheet(
+                    onSelect = { hexcode -> onSendReaction(hexcode) },
+                    onDismiss = { showEmojiTray = false }
+                )
             }
         }
 
         if (pendingReaction != null) {
             Box(
-                modifier = Modifier.fillMaxWidth().height(56.dp),
+                modifier = Modifier.fillMaxWidth().height(72.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(pendingReaction, fontSize = 40.sp)
+                OpenMojiReaction(hexcode = pendingReaction)
             }
         }
     }

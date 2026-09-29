@@ -146,6 +146,20 @@ fun SettingsScreen(paddingValues: PaddingValues) {
             }
         }
 
+        // ATTRIBUTION
+        SectionLabel("Attribution")
+        SettingsCard {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text("Emoji designed by OpenMoji – the open-source emoji and icon project.", fontSize = 12.sp, color = Color.Gray)
+                Text("License: CC BY-SA 4.0", fontSize = 12.sp, color = Color.Gray)
+            }
+        }
+
         // APP INFO
         SettingsCard {
             Column(
