@@ -149,7 +149,7 @@ class GameScreenViewModel(private val context: Context? = null) : ViewModel() {
                 val success = repository.joinOrCreateGame(gameId, deviceUID, playerName, timerSeconds)
                 if (success) {
                     _effectiveUID.value = (repository as? FirebaseGameRepository)?.effectiveUID ?: deviceUID
-                    RecentRoomsManager.recordPlay(ctx, gameId)
+                    RecentRoomsManager.recordPlay(ctx, gameId, if (isAI) difficulty.name else null)
                 } else {
                     _errorMessage.value = "Failed to join or create game"
                 }

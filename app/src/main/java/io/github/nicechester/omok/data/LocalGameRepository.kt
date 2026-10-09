@@ -16,13 +16,18 @@ class LocalGameRepository(
         const val AI_UID = "ai-player"
     }
 
-    // Skip existence check — always create a fresh AI game directly
+    // For AI games: create fresh if new, otherwise just listen to existing game
     override suspend fun joinOrCreateGame(gameId: String, uid: String, playerName: String, timerDuration: Int): Boolean {
         val ref = gamesRef.child(gameId)
         return try {
-            createGame(ref, uid, playerName, timerDuration)
+            val snapshot = ref.get().await()
+            if (!snapshot.exists()) {
+                createGame(ref, uid, playerName, timerDuration)
+            }
             effectiveUID = uid
             listenToGame(gameId)
+            // If it's AI's turn (AI is black on even rounds), trigger AI move
+            performAIMove()
             true
         } catch (e: Exception) {
             false
@@ -109,11 +114,17 @@ class LocalGameRepository(
         ref.updateChildren(updates as Map<String, Any>).await()
     }
 
-    // AI auto-votes rematch
+    // AI auto-votes rematch, then trigger AI move if AI is black
     override suspend fun voteRematch() {
         super.voteRematch()
         val gameId = currentGameId ?: return
         gamesRef.child(gameId).child("rematch").child(AI_UID).setValue(true).await()
+    }
+
+    // After rematch reset, trigger AI move if AI plays black
+    override suspend fun resetForRematch() {
+        super.resetForRematch()
+        performAIMove()
     }
 
     private suspend fun performAIMove() {

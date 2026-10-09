@@ -58,7 +58,7 @@ import kotlinx.coroutines.tasks.await
 @Composable
 fun RoomsScreen(
     paddingValues: PaddingValues,
-    onJoinRoom: (String) -> Unit = {}
+    onJoinRoom: (String, String?) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -74,8 +74,8 @@ fun RoomsScreen(
         ) {
             GameSetupSheet(
                 onDismiss = { showNewGame.value = false },
-                onStartGame = { gameId, _, _, _, _ ->
-                    onJoinRoom(gameId)
+                onStartGame = { gameId, isAI, _, _, difficulty ->
+                    onJoinRoom(gameId, if (isAI) difficulty.name else null)
                     showNewGame.value = false
                 }
             )
@@ -169,7 +169,7 @@ fun RoomsScreen(
                         ) {
                             RoomCell(
                                 room = room,
-                                onTap = { onJoinRoom(room.code) }
+                                onTap = { confirmedDifficulty -> onJoinRoom(room.code, confirmedDifficulty) }
                             )
                         }
                         if (room != recentRooms.value.last()) {
@@ -228,7 +228,7 @@ fun RoomsScreen(
 @Composable
 private fun RoomCell(
     room: RecentRoom,
-    onTap: () -> Unit = {}
+    onTap: (String?) -> Unit = {}
 ) {
     val context = LocalContext.current
     val gameState = remember { mutableStateOf<Map<String, Any>?>(null) }
@@ -239,6 +239,12 @@ private fun RoomCell(
         fetchGameState(room.code) { state ->
             gameState.value = state
         }
+    }
+
+    // Check if ai-player exists in Firebase to confirm AI game
+    val confirmedDifficulty: String? = gameState.value?.let { state ->
+        val players = (state["players"] as? Map<String, Any>) ?: emptyMap()
+        if (players.containsKey("ai-player")) room.aiDifficulty else null
     }
 
     val playerMatchup = gameState.value?.let { state ->
@@ -268,7 +274,7 @@ private fun RoomCell(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.White)
-            .clickable { onTap() }
+            .clickable { onTap(confirmedDifficulty) }
             .padding(16.dp)
     ) {
         Text(
