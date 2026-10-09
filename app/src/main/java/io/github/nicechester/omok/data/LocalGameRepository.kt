@@ -16,6 +16,19 @@ class LocalGameRepository(
         const val AI_UID = "ai-player"
     }
 
+    // Skip existence check — always create a fresh AI game directly
+    override suspend fun joinOrCreateGame(gameId: String, uid: String, playerName: String, timerDuration: Int): Boolean {
+        val ref = gamesRef.child(gameId)
+        return try {
+            createGame(ref, uid, playerName, timerDuration)
+            effectiveUID = uid
+            listenToGame(gameId)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     // Override createGame to add AI as a real player and start as "playing"
     override suspend fun createGame(ref: DatabaseReference, uid: String, playerName: String, timerDuration: Int) {
         val sanitized = playerName.trim().take(20)
