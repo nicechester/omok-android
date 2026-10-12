@@ -184,7 +184,7 @@ open class FirebaseGameRepository : GameRepository {
                 updates["status"] = "finished"
                 updates["result"] = playerColor
                 updates["winningLine"] = winLine.map { mapOf("r" to it.first, "c" to it.second) }
-                val currentScore = (dict["scores"] as? Map<String, Any>)?.get(uid) as? Int ?: 0
+                val currentScore = ((dict["scores"] as? Map<String, Any>)?.get(uid) as? Number)?.toInt() ?: 0
                 updates["scores/$uid"] = currentScore + 1
             } else if (moveCount >= 225) {
                 updates["status"] = "finished"
@@ -222,7 +222,7 @@ open class FirebaseGameRepository : GameRepository {
                 "updatedAt" to ServerValue.TIMESTAMP
             )
             if (winnerUid != null) {
-                val currentScore = (dict["scores"] as? Map<String, Any>)?.get(winnerUid) as? Int ?: 0
+                val currentScore = ((dict["scores"] as? Map<String, Any>)?.get(winnerUid) as? Number)?.toInt() ?: 0
                 updates["scores/$winnerUid"] = currentScore + 1
             }
             ref.updateChildren(updates).await()
@@ -376,7 +376,7 @@ open class FirebaseGameRepository : GameRepository {
                 "updatedAt" to ServerValue.TIMESTAMP
             )
             if (winnerUid != null) {
-                val currentScore = (dict["scores"] as? Map<String, Any>)?.get(winnerUid) as? Int ?: 0
+                val currentScore = ((dict["scores"] as? Map<String, Any>)?.get(winnerUid) as? Number)?.toInt() ?: 0
                 updates["scores/$winnerUid"] = currentScore + 1
             }
             ref.updateChildren(updates).await()

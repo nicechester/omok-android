@@ -15,6 +15,7 @@ import io.github.nicechester.omok.ui.game.GameScreenViewModel
 import io.github.nicechester.omok.ui.screens.HelpScreen
 import io.github.nicechester.omok.ui.screens.GameScreen
 import io.github.nicechester.omok.ui.screens.RoomsScreen
+import io.github.nicechester.omok.game.AIDifficulty
 import io.github.nicechester.omok.ui.screens.SettingsScreen
 
 @Composable
@@ -41,8 +42,9 @@ fun OmokNavHost(
         composable("rooms") {
             RoomsScreen(
                 paddingValues = paddingValues,
-                onJoinRoom = { gameId ->
-                    gameViewModel.joinOrCreateGame(gameId)
+                onJoinRoom = { gameId, aiDifficultyName ->
+                    val difficulty = aiDifficultyName?.let { AIDifficulty.valueOf(it) }
+                    gameViewModel.joinOrCreateGame(gameId, isAI = difficulty != null, difficulty = difficulty ?: AIDifficulty.NORMAL)
                     navController.navigate("play")
                 }
             )

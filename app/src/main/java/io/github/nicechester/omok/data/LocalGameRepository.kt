@@ -16,6 +16,24 @@ class LocalGameRepository(
         const val AI_UID = "ai-player"
     }
 
+    // For AI games: create fresh if new, otherwise just listen to existing game
+    override suspend fun joinOrCreateGame(gameId: String, uid: String, playerName: String, timerDuration: Int): Boolean {
+        val ref = gamesRef.child(gameId)
+        return try {
+            val snapshot = ref.get().await()
+            if (!snapshot.exists()) {
+                createGame(ref, uid, playerName, timerDuration)
+            }
+            effectiveUID = uid
+            listenToGame(gameId)
+            // If it's AI's turn (AI is black on even rounds), trigger AI move
+            performAIMove()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     // Override createGame to add AI as a real player and start as "playing"
     override suspend fun createGame(ref: DatabaseReference, uid: String, playerName: String, timerDuration: Int) {
         val sanitized = playerName.trim().take(20)
@@ -96,11 +114,17 @@ class LocalGameRepository(
         ref.updateChildren(updates as Map<String, Any>).await()
     }
 
-    // AI auto-votes rematch
+    // AI auto-votes rematch, then trigger AI move if AI is black
     override suspend fun voteRematch() {
         super.voteRematch()
         val gameId = currentGameId ?: return
         gamesRef.child(gameId).child("rematch").child(AI_UID).setValue(true).await()
+    }
+
+    // After rematch reset, trigger AI move if AI plays black
+    override suspend fun resetForRematch() {
+        super.resetForRematch()
+        performAIMove()
     }
 
     private suspend fun performAIMove() {
