@@ -119,8 +119,9 @@ open class FirebaseGameRepository : GameRepository {
             return uid
         }
 
-        val takenColors = players.values
-            .mapNotNull { (it as? Map<String, Any>)?.get("color") as? String }
+        val takenColors = players.entries
+            .filter { it.key !in knownUIDs }
+            .mapNotNull { (it.value as? Map<String, Any>)?.get("color") as? String }
             .toSet()
         check(takenColors.size < 2) { "Game is full" }
 
